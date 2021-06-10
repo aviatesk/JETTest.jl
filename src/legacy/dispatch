@@ -6,7 +6,7 @@ function CC._typeinf(analyzer::DispatchAnalyzer, frame::InferenceState)
     concrete_frame = analyzer.concrete_frame
     skip_nonconcrete_calls = !isnothing(concrete_frame)
     if skip_nonconcrete_calls
-        analyzer.concrete_frame = isconcretedispatch(frame.linfo.specTypes)
+        analyzer.concrete_frame = isdispatchtuple(frame.linfo.specTypes)
     end
 
     ret = @invoke _typeinf(analyzer::AbstractAnalyzer, frame::InferenceState)
