@@ -37,6 +37,39 @@ struct DispatchAnalysisPass <: ReportPass end
 # ignore all reports defined by JET.jl
 (::DispatchAnalysisPass)(T::Type{<:InferenceErrorReport}, @nospecialize(_...)) = return
 
+@reportdef struct OptimizationFailureReport <: InferenceErrorReport end
+JETInterfaces.get_msg(::Type{OptimizationFailureReport}, args...) =
+    return "failed to optimize" #: signature of this MethodInstance
+
+function (::DispatchAnalysisPass)(::Type{OptimizationFailureReport}, analyzer::DispatchAnalyzer, frame::InferenceState)
+    report!(OptimizationFailureReport, analyzer, frame.linfo)
+end
+
+@reportdef struct RuntimeDispatchReport <: InferenceErrorReport end
+JETInterfaces.get_msg(::Type{RuntimeDispatchReport}, analyzer, s) =
+    return "runtime dispatch detected" #: call signature
+
+function (::DispatchAnalysisPass)(::Type{RuntimeDispatchReport}, analyzer::DispatchAnalyzer, opt::OptimizationState)
+    sptypes, slottypes = opt.sptypes, opt.slottypes
+    for (pc, x) in enumerate(opt.src.code)
+        if @isexpr(x, :call)
+            ft = widenconst(argextype(first(x.args), opt.src, sptypes, slottypes))
+            ft <: Builtin && continue # ignore `:call`s of language intrinsics
+            if analyzer.function_filter(ft)
+                report!(RuntimeDispatchReport, analyzer, (opt, pc))
+            end
+        end
+    end
+end
+
+# branch on https://github.com/JuliaLang/julia/pull/39885
+@static if isdefined(CC, :finish!)
+
+import .CC:
+    _typeinf,
+    finish,
+    finish!
+
 function CC._typeinf(analyzer::DispatchAnalyzer, frame::InferenceState)
     @assert isempty(analyzer.opts)
     ret = @invoke _typeinf(analyzer::AbstractAnalyzer, frame::InferenceState)
@@ -61,14 +94,6 @@ function CC.finish(frame::InferenceState, analyzer::DispatchAnalyzer)
     return ret
 end
 
-@reportdef struct OptimizationFailureReport <: InferenceErrorReport end
-JETInterfaces.get_msg(::Type{OptimizationFailureReport}, args...) =
-    return "failed to optimize" #: signature of this MethodInstance
-
-function (::DispatchAnalysisPass)(::Type{OptimizationFailureReport}, analyzer::DispatchAnalyzer, frame::InferenceState)
-    report!(OptimizationFailureReport, analyzer, frame.linfo)
-end
-
 function CC.finish!(analyzer::DispatchAnalyzer, caller::InferenceResult)
     opt = caller.src
 
@@ -90,22 +115,11 @@ function CC.finish!(analyzer::DispatchAnalyzer, caller::InferenceResult)
     return ret
 end
 
-@reportdef struct RuntimeDispatchReport <: InferenceErrorReport end
-JETInterfaces.get_msg(::Type{RuntimeDispatchReport}, analyzer, s) =
-    return "runtime dispatch detected" #: call signature
+else # @static if isdefined(CC, :finish!)
 
-function (::DispatchAnalysisPass)(::Type{RuntimeDispatchReport}, analyzer::DispatchAnalyzer, opt::OptimizationState)
-    (; sptypes, slottypes) = opt
-    for (pc, x) in enumerate(opt.src.code)
-        if @isexpr(x, :call)
-            ft = widenconst(argextype(first(x.args), opt.src, sptypes, slottypes))
-            ft <: Builtin && continue # ignore `:call`s of language intrinsics
-            if analyzer.function_filter(ft)
-                report!(RuntimeDispatchReport, analyzer, (opt, pc))
-            end
-        end
-    end
-end
+include("legacy/dispatch")
+
+end # @static if isdefined(CC, :finish!)
 
 # entries
 # =======
@@ -187,6 +201,15 @@ end
 
 iskwarg(@nospecialize(x)) = @isexpr(x, :(=))
 
+get_exceptions() = @static if isdefined(Base, :current_exceptions)
+    Base.current_exceptions()
+else
+    Base.catch_stack()
+end
+@static if !hasfield(Pass, :source)
+    Pass(test_type::Symbol, orig_expr, data, thrown, source) = Pass(test_type, orig_expr, data, thrown)
+end
+
 function test_dispatch_exs(ex0, m, source)
     analyzer_call = gen_call_with_extracted_types_and_kwargs(m, :analyze_dispatch, ex0)
     orig_expr = QuoteNode(
@@ -202,7 +225,7 @@ function test_dispatch_exs(ex0, m, source)
         end
     catch err
         isa(err, $InterruptException) && rethrow()
-        $Error(:test_error, $orig_expr, err, $(Base.current_exceptions)(), $source)
+        $Error(:test_error, $orig_expr, err, $get_exceptions(), $source)
     end) |> Base.remove_linenums!
     return testres, orig_expr
 end
@@ -226,7 +249,7 @@ function Base.show(io::IO, t::DispatchTestFailure)
     _, ctx = Base.unwrapcontext(io)
     buf = IOBuffer()
     ioctx = IOContext(buf, ctx)
-    JET.print_reports(ioctx, t.reports) # TODO kwargs support
+    print_reports(ioctx, t.reports) # TODO kwargs support
     lines = replace(String(take!(buf)), '\n'=>string('\n',TEST_INDENTS))
     print(io, TEST_INDENTS, lines)
 end
@@ -234,7 +257,7 @@ end
 Base.show(io::IO, ::MIME"application/prs.juno.inline", t::DispatchTestFailure) =
     return t
 
-function Test.record(::AbstractTestSet, t::DispatchTestFailure)
+function Test.record(::Test.FallbackTestSet, t::DispatchTestFailure)
     println(t)
     throw(FallbackTestSetException("There was an error during testing"))
 end

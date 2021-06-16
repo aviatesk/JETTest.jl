@@ -27,7 +27,6 @@ let
     @test length(get_reports(analyzer)) == 1
     r = first(get_reports(analyzer))
     @test isa(r, RuntimeDispatchReport)
-    get_reports(analyzer)
 end
 
 # if we annotate `@noinline` to a function, then its call won't be inlined and will be
@@ -89,12 +88,12 @@ end
 
 # we will get bunch of reports from the `println` call
 let
-    analyzer, = @analyze_dispatch compute(30);
+    analyzer, = @analyze_dispatch compute(30)
     @test !isempty(get_reports(analyzer))
 end
 # if we use different `frame_filter`, a fresh analysis should run
 let
-    analyzer, = @analyze_dispatch frame_filter=module_filter(@__MODULE__) compute(30);
+    analyzer, = @analyze_dispatch frame_filter=module_filter(@__MODULE__) compute(30)
     @test isempty(get_reports(analyzer))
 end
 

@@ -1,0 +1,30 @@
+import .CC:
+    finish,
+    optimize
+
+function CC.finish(frame::InferenceState, analyzer::DispatchAnalyzer)
+    ret = @invoke finish(frame::InferenceState, analyzer::AbstractAnalyzer)
+
+    if !analyzer.frame_filter(frame)
+        push!(analyzer.opts, false)
+    else
+        if isa(frame.result.src, OptimizationState)
+            push!(analyzer.opts, true)
+        else
+            report_pass!(OptimizationFailureReport, analyzer, frame)
+            push!(analyzer.opts, false)
+        end
+    end
+
+    return ret
+end
+
+function CC.optimize(analyzer::AbstractAnalyzer, opt::OptimizationState, params::OptimizationParams, @nospecialize(result))
+    ret = @invoke optimize(analyzer::AbstractInterpreter, opt::OptimizationState, params::OptimizationParams, @nospecialize(result))
+
+    if analyzer.frame_filter(opt)
+        report_pass!(RuntimeDispatchReport, analyzer, opt)
+    end
+
+    return ret
+end
