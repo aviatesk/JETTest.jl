@@ -1,0 +1,18 @@
+name = "JETTest"
+uuid = "a79fb612-4a80-4749-a9bd-c2faab13da61"
+authors = ["Shuhei Kadowaki <aviatesk@gmail.com> and contributors"]
+version = "0.0.0"
+
+[deps]
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+JET = "0.3.2"
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
