@@ -16,24 +16,15 @@ using JET.JETInterfaces
 import JET:
     get_cache_key
 
-import .CC:
-    _typeinf,
-    finish,
-    finish!,
-    optimize,
-    collect_argtypes,
-    abstract_call_gf_by_type
-
 import Test:
     record
 
 # usings
 # ======
-# TODO: really use `using` instead
 
 using JET
 
-import JET:
+using JET:
     State,
     @invoke,
     @isexpr,
@@ -41,7 +32,7 @@ import JET:
     get_reports,
     print_reports
 
-import .CC:
+using .CC:
     AbstractInterpreter,
     InferenceState,
     InferenceResult,
@@ -51,13 +42,13 @@ import .CC:
     widenconst,
     argextype
 
-import Core:
+using Core:
     Builtin,
     Const,
     CodeInfo,
     MethodInstance
 
-import Test:
+using Test:
     Test,
     Pass, Fail, Broken, Error,
     Threw,
