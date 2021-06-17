@@ -35,15 +35,21 @@ and then reports detected optimization failures and runtime dispatch points:
 ```@repl quickstart
 using JETTest
 
-addsincos(v1, v2) = sin(v1) + cos(v2); # main computation kernel
+function kernel(f, vals)
+    s = zero(eltype(vals))
+    for v in vals
+        s += f(v)
+    end
+    return s
+end
 
-params = (; v1 = 10, v2 = -10);
-f() = addsincos(params.v1, params.v2); # this function uses the non-constant global variable and thus is very type-unstable
+vals = rand(10);
+f() = kernel(sin, vals) # this function uses the non-constant global variable and thus is very type-unstable
 
 @report_dispatch f() # runtime dispatches will be reported
 
-f(params) = addsincos(params.v1, params.v2); # we can pass parameters as a function argument, and then everything is type-stable
-@report_dispatch f((; v1 = 10, v2 = -10)) # now runtime dispatch free !
+f(vals) = kernel(sin, vals); # we can pass parameters as a function argument, and then everything is type-stable
+@report_dispatch f(vals) # now runtime dispatch free !
 ```
 
 With the [`frame_filter`](@ref dispatch-analysis-configurations) configuration, we can focus on type
@@ -86,8 +92,8 @@ using Test
 @testset "check type-stabilities" begin
     @test_nodispatch f() # should fail
 
-    params = (; v1 = 10, v2 = -10)
-    @test_nodispatch f(params) # should pass
+    vals = rand(10)
+    @test_nodispatch f(vals) # should pass
 
     @test_nodispatch frame_filter=this_module_filter compute(30) # should pass
 
