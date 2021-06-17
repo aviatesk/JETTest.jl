@@ -35,27 +35,33 @@ and then reports detected optimization failures and runtime dispatch points:
 ```@repl quickstart
 using JETTest
 
-function kernel(f, vals)
+n = rand(Int);
+make_vals(n) = n ≥ 0 ? (zero(n):n) : (n:zero(n));
+function sumup(f)
+    vals = make_vals(n) # this function uses the non-constant global variable here and it makes everything very type-unstable
     s = zero(eltype(vals))
     for v in vals
         s += f(v)
     end
     return s
-end
+end;
+@report_dispatch sumup(sin) # runtime dispatches will be reported
 
-vals = rand(10);
-f() = kernel(sin, vals) # this function uses the non-constant global variable and thus is very type-unstable
-
-@report_dispatch f() # runtime dispatches will be reported
-
-f(vals) = kernel(sin, vals); # we can pass parameters as a function argument, and then everything is type-stable
-@report_dispatch f(vals) # now runtime dispatch free !
+function sumup(f, n) # we can pass parameters as a function argument, and then everything is type-stable
+    vals = make_vals(n)
+    s = zero(eltype(vals))
+    for v in vals
+        s += f(v) # we may get an union type, but Julia can optimize away small unions (thus no dispatch here)
+    end
+    return s
+end;
+@report_dispatch sumup(sin, rand(Int)) # now runtime dispatch free !
 ```
 
 With the [`frame_filter`](@ref dispatch-analysis-configurations) configuration, we can focus on type
 instabilities within specific modules of our interest:
 ```@repl quickstart
-# problem: when ∑1/n exceeds 30 ?
+# problem: when ∑1/n exceeds `x` ?
 function compute(x)
     r = 1
     s = 0.0
@@ -83,17 +89,17 @@ this_module_filter(sv) = sv.mod === @__MODULE__;
 [`@test_nodispatch`](@ref) can be used to assert that a given function call is free from type instabilities
 under [`Test` standard library's unit-testing infrastructure](https://docs.julialang.org/en/v1/stdlib/Test/):
 ```@repl quickstart
-@test_nodispatch f()
+@test_nodispatch sumup(cos)
 
 @test_nodispatch frame_filter=this_module_filter compute(30)
 
 using Test
 
 @testset "check type-stabilities" begin
-    @test_nodispatch f() # should fail
+    @test_nodispatch sumup(cos) # should fail
 
-    vals = rand(10)
-    @test_nodispatch f(vals) # should pass
+    n = rand(Int)
+    @test_nodispatch sumup(cos, n) # should pass
 
     @test_nodispatch frame_filter=this_module_filter compute(30) # should pass
 
