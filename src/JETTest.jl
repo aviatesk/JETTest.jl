@@ -3,7 +3,12 @@ module JETTest
 let
     README = normpath(dirname(@__DIR__), "README.md")
     include_dependency(README)
-    @doc read(README, String) JET
+    s = """$(read(README, String))
+
+    The JETTest.jl toolset includes:
+    - [Dispatch Analysis](@ref): automatically detects possible performance pitfalls, where the optimization was failed and/or runtime dispatch will happen
+    """
+    @doc s JETTest
 end
 
 const CC = Core.Compiler
