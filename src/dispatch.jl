@@ -1,6 +1,61 @@
 # DispatchAnalyzer
 # ================
 
+"""
+Every [entry point of dispatch analysis](@ref dispatch-analysis-entry-points) can accept
+any of [JET configurations](https://aviatesk.github.io/JET.jl/dev/config/) as well as
+the following additional configurations that are specific to dispatch analysis:
+- `frame_filter = x::$State->true`:\\
+  A predicate which takes `InfernceState` or `OptimizationState` and returns `false` to skip analysis on the frame.
+- `function_filter = @nospecialize(ft)->true`:\\
+  A predicate which takes a function type and returns `false` to skip analysis on the call.
+- `analyze_unoptimized_throw_blocks::Bool = false`:\\
+  By default, Julia's native compilation pipeline intentionally disables inference (and so
+  succeeding optimizations too) on "throw blocks", which are code blocks that will eventually
+  lead to `throw` calls, in order to ease [the compilation latency problem, a.k.a. "first-time-to-plot"](https://julialang.org/blog/2020/08/invalidations/).
+  Accordingly, the dispatch analyzer also ignores runtime dispatches detected within those blocks
+  since we _usually_ don't mind if code involved with error handling isn't optimized.
+  If `analyze_unoptimized_throw_blocks` is set to `true`, it doesn't ignore them and will
+  report type instabilities detected within "throw blocks".
+
+  See also <https://github.com/JuliaLang/julia/pull/35982>.
+
+# Configuration Examples
+```julia
+# only checks code within the current module:
+julia> mymodule_filter(x) = x.mod === @__MODULE__;
+julia> @report_dispatch frame_filter=mymodule_filter f(args...)
+...
+
+# ignores `Core.Compiler.widenconst` calls (since it's designed to be runtime-dispatched):
+julia> myfunction_filter(@nospecialize(ft)) = ft !== typeof(Core.Compiler.widenconst)
+julia> @report_dispatch function_filter=myfunction_filter f(args...)
+...
+
+# by default, unoptimized "throw blocks" are not analyzed
+julia> @test_nodispatch sin(10)
+Test Passed
+  Expression: #= none:1 =# JETTest.@test_nodispatch sin(10)
+
+# we can turn on the analysis on unoptimized "throw blocks" with `analyze_unoptimized_throw_blocks=true`
+julia> @test_nodispatch analyze_unoptimized_throw_blocks=true sin(10)
+Dispatch Test Failed at none:1
+  Expression: #= none:1 =# JETTest.@test_nodispatch analyze_unoptimized_throw_blocks = true sin(10)
+  ═════ 1 possible error found ═════
+  ┌ @ math.jl:1221 Base.Math.sin(xf)
+  │┌ @ special/trig.jl:39 Base.Math.sin_domain_error(x)
+  ││┌ @ special/trig.jl:28 Base.Math.DomainError(x, "sin(x) is only defined for finite x.")
+  │││ runtime dispatch detected: Base.Math.DomainError(x::Float64, "sin(x) is only defined for finite x.")
+  ││└──────────────────────
+
+ERROR: There was an error during testing
+
+# we can also turns off the heuristic itself
+julia> @test_nodispatch unoptimize_throw_blocks=false analyze_unoptimized_throw_blocks=true sin(10)
+Test Passed
+  Expression: #= none:1 =# JETTest.@test_nodispatch unoptimize_throw_blocks = false analyze_unoptimized_throw_blocks = true sin(10)
+```
+"""
 struct DispatchAnalyzer{S,T} <: AbstractAnalyzer
     state::AnalyzerState
     opts::BitVector
@@ -132,6 +187,14 @@ end # @static if isdefined(CC, :finish!)
 # entries
 # =======
 
+"""
+    analyze_dispatch(f, types = Tuple{}; jetconfigs...) -> (analyzer::DispatchAnalyzer, frame::Union{InferenceFrame,Nothing})
+
+Analyzes the generic function call with the given type signature, and returns:
+- `analyzer::DispatchAnalyzer`: contains analyzed optimization failures and runtime dispatch points
+- `frame::Union{InferenceFrame,Nothing}`: the final state of the abstract interpretation,
+  or `nothing` if `f` is a generator and the code generation has been failed
+"""
 function analyze_dispatch(@nospecialize(f), @nospecialize(types = Tuple{});
                           analyzer = DispatchAnalyzer,
                           jetconfigs...)
@@ -139,6 +202,13 @@ function analyze_dispatch(@nospecialize(f), @nospecialize(types = Tuple{});
     analyze_call(f, types; analyzer, jetconfigs...)
 end
 
+"""
+    report_dispatch(f, types = Tuple{}; jetconfigs...) -> result_type::Any
+
+Analyzes the generic function call with the given type signature, and then prints detected
+optimization failures and runtime dispatch points to `stdout`, and finally returns the result
+type of the call.
+"""
 function report_dispatch(@nospecialize(f), @nospecialize(types = Tuple{});
                          analyzer = DispatchAnalyzer,
                          jetconfigs...)
@@ -146,10 +216,34 @@ function report_dispatch(@nospecialize(f), @nospecialize(types = Tuple{});
     report_call(f, types; analyzer, jetconfigs...)
 end
 
+"""
+    @report_dispatch [jetconfigs...] f(args...)
+
+Evaluates the arguments to the function call, determines its types, and then calls
+[`analyze_dispatch`](@ref) on the resulting expression.
+As with `@code_typed` and its family, any of [JET configurations](https://aviatesk.github.io/JET.jl/dev/config/)
+or [dispatch analysis specific configurations](@ref dispatch-analysis-configurations) can be given as the optional arguments like this:
+```julia
+# reports `rand(::Type{Bool})` with `unoptimize_throw_blocks` configuration turned on
+julia> @analyze_dispatch unoptimize_throw_blocks=true rand(Bool)
+```
+"""
 macro analyze_dispatch(ex0...)
     return gen_call_with_extracted_types_and_kwargs(__module__, :analyze_dispatch, ex0)
 end
 
+"""
+    @report_dispatch [jetconfigs...] f(args...)
+
+Evaluates the arguments to the function call, determines its types, and then calls
+[`report_dispatch`](@ref) on the resulting expression.
+As with `@code_typed` and its family, any of [JET configurations](https://aviatesk.github.io/JET.jl/dev/config/)
+or [dispatch analysis specific configurations](@ref dispatch-analysis-configurations) can be given as the optional arguments like this:
+```julia
+# reports `rand(::Type{Bool})` with `unoptimize_throw_blocks` configuration turned on
+julia> @report_call unoptimize_throw_blocks=true rand(Bool)
+```
+"""
 macro report_dispatch(ex0...)
     return gen_call_with_extracted_types_and_kwargs(__module__, :report_dispatch, ex0)
 end
@@ -157,6 +251,66 @@ end
 # Test integration
 # ================
 
+"""
+    @test_nodispatch [jetconfigs...] [broken=false] [skip=false] f(args...)
+
+Tests the generic function call `f(args...)` is free from runtime dispatch.
+Returns a `Pass` result if it is, a `Fail` result if if contains any location where runtime
+dispatch or optimization failure happens, or an `Error` result if this macro encounters an
+unexpected error. When the test `Fail`s, abstract call stack to each problem location will
+also be printed to `stdout`.
+
+```julia
+julia> @test_nodispatch sincos(10)
+Test Passed
+  Expression: #= none:1 =# JETTest.@test_nodispatch sincos(10)
+```
+
+As with [`@report_dispatch`](@ref) or [`@analyze_dispatch`](@ref), any of [JET configurations](https://aviatesk.github.io/JET.jl/dev/config/)
+or [dispatch analysis specific configurations](@ref dispatch-analysis-configurations) can be given as the optional arguments like this:
+```julia
+julia> function f(n)
+            r = sincos(n)
+            println(r) # `println` is full of runtime dispatches, but we can ignore the corresponding reports from `Base` by explicit frame filter
+            return r
+       end;
+julia> this_module_filter(x) = x.mod === @__MODULE__;
+
+julia> @test_nodispatch frame_filter=this_module_filter f(10)
+Test Passed
+  Expression: #= none:1 =# JETTest.@test_nodispatch frame_filter = this_module_filter f(10)
+```
+
+`@test_nodispatch` is fully integrated with [`Test` standard library's unit-testing infrastructure](https://docs.julialang.org/en/v1/stdlib/Test/).
+It means, the result of `@test_nodispatch` will be included in the final `@testset` summary,
+it supports `skip` and `broken` annotations as `@test` macro does, etc.
+```julia
+julia> using JETTest, Test
+
+julia> f(params) = sin(params.value); # type-stable
+julia> params = (; value = 10);       # non-constant global variable
+julia> g() = sin(params.value);       # very type-instable
+
+julia> @testset "check optimizations" begin
+           @test_nodispatch f((; value = 10)) # pass
+           @test_nodispatch g()               # fail
+           @test_nodispatch broken=true g()   # annotated as broken, thus still "pass"
+       end
+check optimizations: Dispatch Test Failed at none:3
+  Expression: #= none:3 =# JETTest.@test_nodispatch g()
+  ═════ 2 possible errors found ═════
+  ┌ @ none:1 Base.getproperty(%1, :value)
+  │ runtime dispatch detected: Base.getproperty(%1::Any, :value::Symbol)
+  └──────────
+  ┌ @ none:1 Main.sin(%2)
+  │ runtime dispatch detected: Main.sin(%2::Any)
+  └──────────
+
+Test Summary:       | Pass  Fail  Broken  Total
+check optimizations |    1     1       1      3
+ERROR: Some tests did not pass: 1 passed, 1 failed, 0 errored, 1 broken.
+```
+"""
 macro test_nodispatch(ex0...)
     ex0 = collect(ex0)
 

@@ -1,2 +1,5 @@
 /docs/build/
+/docs/src/index.md
+/docs/src/generated-*.md
 Manifest.toml
+!docs/Manifest.toml
