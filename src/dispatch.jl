@@ -6,23 +6,22 @@ struct DispatchAnalyzer{S,T} <: AbstractAnalyzer
     opts::BitVector
     frame_filter::S
     function_filter::T
+    analyze_unoptimized_throw_blocks::Bool
 end
 function DispatchAnalyzer(;
-    # a predicate, which takes `InfernceState` or `OptimizationState` and returns whether we want to analyze the frame or not
     frame_filter = x::State->true,
-    # a predicate, which takes a function type and returns whether we want to analyze the call or not
-    function_filter = @nospecialize(f)->true,
-    # turn off this configuration by default, so that we don't get reports from throw blocks
-    unoptimize_throw_blocks = false,
+    function_filter = @nospecialize(ft)->true,
+    analyze_unoptimized_throw_blocks::Bool = false,
     jetconfigs...)
-    state = AnalyzerState(; unoptimize_throw_blocks, jetconfigs...)
-    return DispatchAnalyzer(state, BitVector(), frame_filter, function_filter)
+    state = AnalyzerState(; jetconfigs...)
+    return DispatchAnalyzer(state, BitVector(), frame_filter, function_filter, analyze_unoptimized_throw_blocks)
 end
 
 # AbstractAnalyzer API requirements
-JETInterfaces.AnalyzerState(analyzer::DispatchAnalyzer)                          = analyzer.state
-JETInterfaces.AbstractAnalyzer(analyzer::DispatchAnalyzer, state::AnalyzerState) = DispatchAnalyzer(state, analyzer.opts, analyzer.frame_filter, analyzer.function_filter)
-JETInterfaces.ReportPass(analyzer::DispatchAnalyzer)                             = DispatchAnalysisPass()
+JETInterfaces.AnalyzerState(analyzer::DispatchAnalyzer) = analyzer.state
+JETInterfaces.AbstractAnalyzer(analyzer::DispatchAnalyzer, state::AnalyzerState) =
+    DispatchAnalyzer(state, analyzer.opts, analyzer.frame_filter, analyzer.function_filter, analyzer.analyze_unoptimized_throw_blocks)
+JETInterfaces.ReportPass(analyzer::DispatchAnalyzer) = DispatchAnalysisPass()
 
 # we want to run different analysis with a different filter, so include its hash into the cache key
 function JET.get_cache_key(analyzer::DispatchAnalyzer)
@@ -34,8 +33,9 @@ end
 
 struct DispatchAnalysisPass <: ReportPass end
 
-# ignore all reports defined by JET.jl
+# ignore most of reports defined by JET.jl
 (::DispatchAnalysisPass)(T::Type{<:InferenceErrorReport}, @nospecialize(_...)) = return
+(::DispatchAnalysisPass)(T::Type{GeneratorErrorReport}, @nospecialize(args...)) = SoundPass()(T, args...)
 
 @reportdef struct OptimizationFailureReport <: InferenceErrorReport end
 JETInterfaces.get_msg(::Type{OptimizationFailureReport}, args...) =
@@ -50,8 +50,16 @@ JETInterfaces.get_msg(::Type{RuntimeDispatchReport}, analyzer, s) =
     return "runtime dispatch detected" #: call signature
 
 function (::DispatchAnalysisPass)(::Type{RuntimeDispatchReport}, analyzer::DispatchAnalyzer, opt::OptimizationState)
+    throw_blocks =
+        !analyzer.analyze_unoptimized_throw_blocks && opt.inlining.params.unoptimize_throw_blocks ?
+        find_throw_blocks(opt.src.code) : nothing
+
     sptypes, slottypes = opt.sptypes, opt.slottypes
     for (pc, x) in enumerate(opt.src.code)
+        if !isnothing(throw_blocks)
+            # optimization is intentionally turned off for this block, let's ignore anything here
+            CC.in(pc, throw_blocks) && continue
+        end
         if @isexpr(x, :call)
             ft = widenconst(argextype(first(x.args), opt.src, sptypes, slottypes))
             ft <: Builtin && continue # ignore `:call`s of language intrinsics

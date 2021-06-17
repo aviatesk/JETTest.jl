@@ -52,19 +52,11 @@ end
 # real-world targets
 # ------------------
 
-# by default, DispatchAnalyzer turns off the `unoptimize_throw_blocks` configuration, so that
-# we don't get reports from throw blocks
+# the `unoptimize_throw_blocks` configuration disables optimizations on "throw blocks" by default,
+# but `DispatchAnalyzer` ignores problems from them, so we don't get error reports here
 let
     analyzer, = @analyze_dispatch sin(10)
     @test isempty(get_reports(analyzer))
-end
-
-# we can test the native interpration with an explicit configuration
-let
-    analyzer, = @analyze_dispatch unoptimize_throw_blocks=true sin(10)
-    @test length(get_reports(analyzer)) == 1
-    r = first(get_reports(analyzer))
-    @test isa(r, RuntimeDispatchReport)
 end
 
 # filter
@@ -209,7 +201,7 @@ let
     @test r.test_type === :test_unbroken
 end
 
-# supports JET's configurations at the same time
+# supports JET's configurations
 let
     ts = with_isolated_testset() do
         @test_nodispatch sin(10) # ok
@@ -217,7 +209,12 @@ let
     @test ts.n_passed == 1
 
     ts = with_isolated_testset() do
-        @test_nodispatch unoptimize_throw_blocks=true sin(10)
+        @test_nodispatch sin(10) # still be ok
+    end
+    @test ts.n_passed == 1
+
+    ts = with_isolated_testset() do
+        @test_nodispatch analyze_unoptimized_throw_blocks=true sin(10)
     end
     @test ts.n_passed == 0
     @test length(ts.results) == 1
@@ -225,7 +222,7 @@ let
     @test isa(r, Test.Fail)
 
     ts = with_isolated_testset() do
-        @test_nodispatch unoptimize_throw_blocks=true broken=true sin(10)
+        @test_nodispatch analyze_unoptimized_throw_blocks=true broken=true sin(10)
     end
     @test ts.n_passed == 0
     @test length(ts.results) == 1

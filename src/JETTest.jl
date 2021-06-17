@@ -39,6 +39,7 @@ using .CC:
     OptimizationState,
     OptimizationParams,
     IRCode,
+    find_throw_blocks,
     widenconst,
     argextype
 
