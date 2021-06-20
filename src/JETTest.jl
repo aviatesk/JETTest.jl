@@ -54,6 +54,9 @@ using Core:
     CodeInfo,
     MethodInstance
 
+using Base:
+    isconcretedispatch
+
 using Test:
     Test,
     Pass, Fail, Broken, Error,

@@ -1,19 +1,18 @@
 import .CC:
-    finish,
+    _typeinf,
     optimize
 
-function CC.finish(frame::InferenceState, analyzer::DispatchAnalyzer)
-    ret = @invoke finish(frame::InferenceState, analyzer::AbstractAnalyzer)
+function CC._typeinf(analyzer::DispatchAnalyzer, frame::InferenceState)
+    concrete_frame = analyzer.concrete_frame
+    skip_nonconcrete_calls = !isnothing(concrete_frame)
+    if skip_nonconcrete_calls
+        analyzer.concrete_frame = isconcretedispatch(frame.linfo.specTypes)
+    end
 
-    if !analyzer.frame_filter(frame)
-        push!(analyzer.opts, false)
-    else
-        if isa(frame.result.src, OptimizationState)
-            push!(analyzer.opts, true)
-        else
-            report_pass!(OptimizationFailureReport, analyzer, frame)
-            push!(analyzer.opts, false)
-        end
+    ret = @invoke _typeinf(analyzer::AbstractAnalyzer, frame::InferenceState)
+
+    if skip_nonconcrete_calls
+        analyzer.concrete_frame = concrete_frame::Bool
     end
 
     return ret
@@ -22,7 +21,8 @@ end
 function CC.optimize(analyzer::AbstractAnalyzer, opt::OptimizationState, params::OptimizationParams, @nospecialize(result))
     ret = @invoke optimize(analyzer::AbstractInterpreter, opt::OptimizationState, params::OptimizationParams, @nospecialize(result))
 
-    if analyzer.frame_filter(opt)
+    concrete_frame = analyzer.concrete_frame
+    if (isnothing(concrete_frame) || concrete_frame::Bool) && analyzer.frame_filter(opt)
         report_pass!(RuntimeDispatchReport, analyzer, opt)
     end
 

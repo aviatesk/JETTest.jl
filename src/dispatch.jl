@@ -4,78 +4,147 @@
 """
 Every [entry point of dispatch analysis](@ref dispatch-analysis-entry-points) can accept
 any of [JET configurations](https://aviatesk.github.io/JET.jl/dev/config/) as well as
-the following additional configurations that are specific to dispatch analysis:
+the following additional configurations that are specific to dispatch analysis.
+
+---
 - `frame_filter = x::$State->true`:\\
   A predicate which takes `InfernceState` or `OptimizationState` and returns `false` to skip analysis on the frame.
+  ```julia
+  # only checks code within the current module:
+  julia> mymodule_filter(x) = x.mod === @__MODULE__;
+  julia> @test_nodispatch frame_filter=mymodule_filter f(args...)
+  ...
+  ```
+
+---
 - `function_filter = @nospecialize(ft)->true`:\\
   A predicate which takes a function type and returns `false` to skip analysis on the call.
-- `analyze_unoptimized_throw_blocks::Bool = false`:\\
+  ```julia
+  # ignores `Core.Compiler.widenconst` calls (since it's designed to be runtime-dispatched):
+  julia> myfunction_filter(@nospecialize(ft)) = ft !== typeof(Core.Compiler.widenconst)
+  julia> @test_nodispatch function_filter=myfunction_filter f(args...)
+  ...
+  ```
+
+---
+- `skip_nonconcrete_calls::Bool = true`:\\
+  Julia's runtime dispatch is "powerful" because it can always compile code with concrete
+  runtime arguments so that [a "kernel" function](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
+  runs very effectively even if it's called from a type-instable call site.
+  This means, we (really) often accept that some parts of our code are not inferred statically,
+  and rather we want to just rely on information that is only available at runtime.
+  To model this programming style, dispatch analyzer does NOT report any optimization failures
+  or runtime dispatches detected within non-concrete calls under the default configuration.
+  We can turn off this `skip_nonconcrete_calls` configuration to get type-instabilities
+  within non-concrete calls.
+  ```julia
+  # the following examples are adapted from https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions
+  julia> function fill_twos!(a)
+             for i = eachindex(a)
+                 a[i] = 2
+             end
+         end;
+
+  julia> function strange_twos(n)
+             a = Vector{rand(Bool) ? Int64 : Float64}(undef, n)
+             fill_twos!(a)
+             return a
+         end;
+
+  # by default, only type-instabilities within concrete call (i.e. `strange_twos(3)`) are reported
+  # and those within non-concrete calls (`fill_twos!(a)`) are not reported
+  julia> @report_dispatch strange_twos(3)
+  ═════ 2 possible errors found ═════
+  ┌ @ REPL[2]:2 %45(Main.undef, n)
+  │ runtime dispatch detected: %45::Type{Vector{_A}} where _A(Main.undef, n::Int64)
+  └─────────────
+  ┌ @ REPL[2]:3 Main.fill_twos!(%46)
+  │ runtime dispatch detected: Main.fill_twos!(%46::Vector)
+  └─────────────
+  Vector (alias for Array{_A, 1} where _A)
+
+  # we can get reports from non-concrete calls with `skip_nonconcrete_calls=false`
+  julia> @report_dispatch skip_nonconcrete_calls=false strange_twos(3)
+  ═════ 4 possible errors found ═════
+  ┌ @ REPL[2]:3 Main.fill_twos!(a)
+  │┌ @ REPL[1]:3 Base.setindex!(a, 2, %14)
+  ││ runtime dispatch detected: Base.setindex!(a::Vector, 2, %14::Int64)
+  │└─────────────
+  │┌ @ REPL[1]:3 Base.setindex!(a, 2, i)
+  ││┌ @ array.jl:877 Base.convert(_, x)
+  │││ runtime dispatch detected: Base.convert(_::Any, x::Int64)
+  ││└────────────────
+  ┌ @ REPL[2]:2 %45(Main.undef, n)
+  │ runtime dispatch detected: %45::Type{Vector{_A}} where _A(Main.undef, n::Int64)
+  └─────────────
+  ┌ @ REPL[2]:3 Main.fill_twos!(%46)
+  │ runtime dispatch detected: Main.fill_twos!(%46::Vector)
+  └─────────────
+  Vector (alias for Array{_A, 1} where _A)
+  ```
+
+---
+- `skip_unoptimized_throw_blocks::Bool = true`:\\
   By default, Julia's native compilation pipeline intentionally disables inference (and so
   succeeding optimizations too) on "throw blocks", which are code blocks that will eventually
   lead to `throw` calls, in order to ease [the compilation latency problem, a.k.a. "first-time-to-plot"](https://julialang.org/blog/2020/08/invalidations/).
   Accordingly, the dispatch analyzer also ignores runtime dispatches detected within those blocks
   since we _usually_ don't mind if code involved with error handling isn't optimized.
-  If `analyze_unoptimized_throw_blocks` is set to `true`, it doesn't ignore them and will
+  If `skip_unoptimized_throw_blocks` is set to `false`, it doesn't ignore them and will
   report type instabilities detected within "throw blocks".
 
   See also <https://github.com/JuliaLang/julia/pull/35982>.
 
-# Configuration Examples
-```julia
-# only checks code within the current module:
-julia> mymodule_filter(x) = x.mod === @__MODULE__;
-julia> @report_dispatch frame_filter=mymodule_filter f(args...)
-...
+  ```julia
+  # by default, unoptimized "throw blocks" are not analyzed
+  julia> @test_nodispatch sin(10)
+  Test Passed
+    Expression: #= none:1 =# JETTest.@test_nodispatch sin(10)
 
-# ignores `Core.Compiler.widenconst` calls (since it's designed to be runtime-dispatched):
-julia> myfunction_filter(@nospecialize(ft)) = ft !== typeof(Core.Compiler.widenconst)
-julia> @report_dispatch function_filter=myfunction_filter f(args...)
-...
+  # we can turn on the analysis on unoptimized "throw blocks" with `skip_unoptimized_throw_blocks=false`
+  julia> @test_nodispatch skip_unoptimized_throw_blocks=false sin(10)
+  Dispatch Test Failed at none:1
+    Expression: #= none:1 =# JETTest.@test_nodispatch skip_unoptimized_throw_blocks = false sin(10)
+    ═════ 1 possible error found ═════
+    ┌ @ math.jl:1221 Base.Math.sin(xf)
+    │┌ @ special/trig.jl:39 Base.Math.sin_domain_error(x)
+    ││┌ @ special/trig.jl:28 Base.Math.DomainError(x, "sin(x) is only defined for finite x.")
+    │││ runtime dispatch detected: Base.Math.DomainError(x::Float64, "sin(x) is only defined for finite x.")
+    ││└──────────────────────
 
-# by default, unoptimized "throw blocks" are not analyzed
-julia> @test_nodispatch sin(10)
-Test Passed
-  Expression: #= none:1 =# JETTest.@test_nodispatch sin(10)
+  ERROR: There was an error during testing
 
-# we can turn on the analysis on unoptimized "throw blocks" with `analyze_unoptimized_throw_blocks=true`
-julia> @test_nodispatch analyze_unoptimized_throw_blocks=true sin(10)
-Dispatch Test Failed at none:1
-  Expression: #= none:1 =# JETTest.@test_nodispatch analyze_unoptimized_throw_blocks = true sin(10)
-  ═════ 1 possible error found ═════
-  ┌ @ math.jl:1221 Base.Math.sin(xf)
-  │┌ @ special/trig.jl:39 Base.Math.sin_domain_error(x)
-  ││┌ @ special/trig.jl:28 Base.Math.DomainError(x, "sin(x) is only defined for finite x.")
-  │││ runtime dispatch detected: Base.Math.DomainError(x::Float64, "sin(x) is only defined for finite x.")
-  ││└──────────────────────
+  # we can also turns off the heuristic itself
+  julia> @test_nodispatch unoptimize_throw_blocks=false skip_unoptimized_throw_blocks=false sin(10)
+  Test Passed
+    Expression: #= none:1 =# JETTest.@test_nodispatch unoptimize_throw_blocks = false skip_unoptimized_throw_blocks = false sin(10)
+  ```
 
-ERROR: There was an error during testing
-
-# we can also turns off the heuristic itself
-julia> @test_nodispatch unoptimize_throw_blocks=false analyze_unoptimized_throw_blocks=true sin(10)
-Test Passed
-  Expression: #= none:1 =# JETTest.@test_nodispatch unoptimize_throw_blocks = false analyze_unoptimized_throw_blocks = true sin(10)
-```
+---
 """
-struct DispatchAnalyzer{S,T} <: AbstractAnalyzer
+mutable struct DispatchAnalyzer{S,T} <: AbstractAnalyzer
     state::AnalyzerState
     opts::BitVector
     frame_filter::S
     function_filter::T
-    analyze_unoptimized_throw_blocks::Bool
+    concrete_frame::Union{Nothing,Bool}
+    skip_unoptimized_throw_blocks::Bool
 end
 function DispatchAnalyzer(;
     frame_filter = x::State->true,
     function_filter = @nospecialize(ft)->true,
-    analyze_unoptimized_throw_blocks::Bool = false,
+    skip_nonconcrete_calls::Bool = true,
+    skip_unoptimized_throw_blocks::Bool = true,
     jetconfigs...)
     state = AnalyzerState(; jetconfigs...)
-    return DispatchAnalyzer(state, BitVector(), frame_filter, function_filter, analyze_unoptimized_throw_blocks)
+    concrete_frame = skip_nonconcrete_calls ? true : nothing
+    return DispatchAnalyzer(state, BitVector(), frame_filter, function_filter, concrete_frame, skip_unoptimized_throw_blocks)
 end
 
 # AbstractAnalyzer API requirements
 JETInterfaces.AnalyzerState(analyzer::DispatchAnalyzer) = analyzer.state
 JETInterfaces.AbstractAnalyzer(analyzer::DispatchAnalyzer, state::AnalyzerState) =
-    DispatchAnalyzer(state, analyzer.opts, analyzer.frame_filter, analyzer.function_filter, analyzer.analyze_unoptimized_throw_blocks)
+    DispatchAnalyzer(state, analyzer.opts, analyzer.frame_filter, analyzer.function_filter, analyzer.concrete_frame, analyzer.skip_unoptimized_throw_blocks)
 JETInterfaces.ReportPass(analyzer::DispatchAnalyzer) = DispatchAnalysisPass()
 
 # we want to run different analysis with a different filter, so include its hash into the cache key
@@ -83,6 +152,8 @@ function JET.get_cache_key(analyzer::DispatchAnalyzer)
     h = @invoke get_cache_key(analyzer::AbstractAnalyzer)
     h = @invoke hash(analyzer.frame_filter::Any, h::UInt)    # HACK avoid dynamic dispatch
     h = @invoke hash(analyzer.function_filter::Any, h::UInt) # HACK avoid dynamic dispatch
+    h = hash(isnothing(analyzer.concrete_frame), h)
+    h = hash(analyzer.skip_unoptimized_throw_blocks, h)
     return h
 end
 
@@ -106,7 +177,7 @@ JETInterfaces.get_msg(::Type{RuntimeDispatchReport}, analyzer, s) =
 
 function (::DispatchAnalysisPass)(::Type{RuntimeDispatchReport}, analyzer::DispatchAnalyzer, opt::OptimizationState)
     throw_blocks =
-        !analyzer.analyze_unoptimized_throw_blocks && opt.inlining.params.unoptimize_throw_blocks ?
+        analyzer.skip_unoptimized_throw_blocks && opt.inlining.params.unoptimize_throw_blocks ?
         find_throw_blocks(opt.src.code) : nothing
 
     sptypes, slottypes = opt.sptypes, opt.slottypes
@@ -135,22 +206,36 @@ import .CC:
 
 function CC._typeinf(analyzer::DispatchAnalyzer, frame::InferenceState)
     @assert isempty(analyzer.opts)
+
+    (; concrete_frame) = analyzer
+    skip_nonconcrete_calls = !isnothing(concrete_frame)
+    if skip_nonconcrete_calls
+        analyzer.concrete_frame = isconcretedispatch(frame.linfo.specTypes)
+    end
+
     ret = @invoke _typeinf(analyzer::AbstractAnalyzer, frame::InferenceState)
+
+    if skip_nonconcrete_calls
+        analyzer.concrete_frame = concrete_frame
+    end
+
     @assert isempty(analyzer.opts)
+
     return ret
 end
 
 function CC.finish(frame::InferenceState, analyzer::DispatchAnalyzer)
     ret = @invoke finish(frame::InferenceState, analyzer::AbstractAnalyzer)
 
-    if !analyzer.frame_filter(frame)
-        push!(analyzer.opts, false)
+    (; concrete_frame, opts) = analyzer
+    if !(isnothing(concrete_frame) || concrete_frame) || !analyzer.frame_filter(frame)
+        push!(opts, false)
     else
         if isa(frame.result.src, OptimizationState)
-            push!(analyzer.opts, true)
+            push!(opts, true)
         else
             report_pass!(OptimizationFailureReport, analyzer, frame)
-            push!(analyzer.opts, false)
+            push!(opts, false)
         end
     end
 

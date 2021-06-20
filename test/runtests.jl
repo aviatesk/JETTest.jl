@@ -11,6 +11,6 @@ using JETTest, Test
             return ft !== typeof(Core.Compiler.widenconst) # `widenconst` is very untyped, ignore
         end
 
-        @test_nodispatch frame_filter=frame_filter function_filter=function_filter analyze_dispatch(sin, (Int,))
+        @test_nodispatch frame_filter=frame_filter function_filter=function_filter skip_nonconcrete_calls=false analyze_dispatch(sin, (Int,))
     end
 end
