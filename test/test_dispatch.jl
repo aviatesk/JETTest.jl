@@ -21,8 +21,8 @@ end
 # if the argument type isn't well typed, compiler can't determine which method to call,
 # and it will lead to runtime dispatch
 let
-    analyzer, = analyze_dispatch((Any,)) do a
-        f(a) # runtime dispatch !
+    analyzer, = analyze_dispatch((Vector{Any},)) do ary
+        f(ary[1]) # runtime dispatch !
     end
     @test length(get_reports(analyzer)) == 1
     r = first(get_reports(analyzer))
@@ -34,7 +34,8 @@ end
 @inline   g1(a) = return a
 @noinline g2(a) = return a
 let
-    analyzer, = analyze_dispatch((Any,)) do a
+    analyzer, = analyze_dispatch((Vector{Any},)) do ary
+        a = ary[1]
         g1(a) # this call should be statically resolved and inlined
         g2(a) # this call should be statically resolved but not inlined, and will be dispatched
     end
@@ -89,6 +90,41 @@ let
     @test isempty(get_reports(analyzer))
 end
 
+# skip_nonconcrete_calls
+# ----------------------
+
+const F1_DEFINITION_LINE = @__LINE__
+f1(a) = sin(a)
+f1(a::Number) = cos(a)
+let
+    # by default, we'd ignore error reports from `f1` calls
+    analyzer, = analyze_dispatch((Vector{Any},)) do ary
+        f1(ary[1]) # runtime dispatch !
+    end
+    @test length(get_reports(analyzer)) == 1
+    r = first(get_reports(analyzer))
+    @test isa(r, RuntimeDispatchReport)
+end
+let
+    # when the `skip_nonconcrete_calls` configuration is turned off, we will get error reports
+    # from those non-concrete calls of `f1`
+    analyzer, = analyze_dispatch((Vector{Any},); skip_nonconcrete_calls=false) do ary
+        f1(ary[1]) # runtime dispatch !
+    end
+    @test length(get_reports(analyzer)) ≥ 3
+    @test any(get_reports(analyzer)) do r
+        isa(r, RuntimeDispatchReport) &&
+        last(r.vst).file === Symbol(@__FILE__) && last(r.vst).line == (@__LINE__) - 5 # report for `f1(ary[1])`
+    end
+    @test any(get_reports(analyzer)) do r
+        isa(r, RuntimeDispatchReport) &&
+        last(r.vst).file === Symbol(@__FILE__) && last(r.vst).line == F1_DEFINITION_LINE+1 # report for `sin(a)` within `f1(a)`
+    end
+    @test any(get_reports(analyzer)) do r
+        isa(r, RuntimeDispatchReport) &&
+        last(r.vst).file === Symbol(@__FILE__) && last(r.vst).line == F1_DEFINITION_LINE+2 # report for `cos(a)` within `f1(a::Number)`
+    end
+end
 
 # Test integration
 # ================
@@ -214,7 +250,7 @@ let
     @test ts.n_passed == 1
 
     ts = with_isolated_testset() do
-        @test_nodispatch analyze_unoptimized_throw_blocks=true sin(10)
+        @test_nodispatch skip_unoptimized_throw_blocks=false sin(10)
     end
     @test ts.n_passed == 0
     @test length(ts.results) == 1
@@ -222,7 +258,7 @@ let
     @test isa(r, Test.Fail)
 
     ts = with_isolated_testset() do
-        @test_nodispatch analyze_unoptimized_throw_blocks=true broken=true sin(10)
+        @test_nodispatch skip_unoptimized_throw_blocks=false broken=true sin(10)
     end
     @test ts.n_passed == 0
     @test length(ts.results) == 1
