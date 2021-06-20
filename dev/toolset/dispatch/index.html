@@ -93,26 +93,25 @@ julia&gt; @report_dispatch compute(30) # bunch of reports will be reported from 
 │┌ @ coreio.jl:4 Base.println(Core.tuple(Core.typeassert(Base.stdout, Base.IO)), xs...)
 ││┌ @ strings/io.jl:73 Base.print(Core.tuple(io), xs, Core.tuple(&quot;\n&quot;)...)
 │││┌ @ strings/io.jl:43 Base.lock(io)
-││││┌ @ show.jl:334 Base.lock(Base.getproperty(io, :io))
-│││││┌ @ stream.jl:282 Base.lock(Base.getproperty(s, :lock))
-││││││┌ @ lock.jl:100 Base.wait(Base.getproperty(rl, :cond_wait))
-│││││││┌ @ condition.jl:112 Base.wait()
-││││││││┌ @ task.jl:809 Base.try_yieldto(Base.ensure_rescheduled)
-│││││││││┌ @ task.jl:747 Base.getproperty(%7, :result)
-││││││││││ runtime dispatch detected: Base.getproperty(%7::Task, :result::Symbol)
-│││││││││└───────────────
-│││││││││┌ @ task.jl:748 Base.setproperty!(%7, :result, Base.nothing)
-││││││││││ runtime dispatch detected: Base.setproperty!(%7::Task, :result::Symbol, Base.nothing)
-│││││││││└───────────────
-│││││││││┌ @ task.jl:749 Base.setproperty!(%7, :_isexception, false)
-││││││││││ runtime dispatch detected: Base.setproperty!(%7::Task, :_isexception::Symbol, false)
-│││││││││└───────────────
-│││││││┌ @ condition.jl:114 Base.list_deletefirst!(%63, %57)
-││││││││ runtime dispatch detected: Base.list_deletefirst!(%63::Any, %57::Task)
-│││││││└────────────────────
-│││││┌ @ stream.jl:282 Base.lock(%3)
-││││││ runtime dispatch detected: Base.lock(%3::Base.AbstractLock)
-│││││└─────────────────
+││││┌ @ stream.jl:282 Base.lock(Base.getproperty(s, :lock))
+│││││┌ @ lock.jl:100 Base.wait(Base.getproperty(rl, :cond_wait))
+││││││┌ @ condition.jl:112 Base.wait()
+│││││││┌ @ task.jl:809 Base.try_yieldto(Base.ensure_rescheduled)
+││││││││┌ @ task.jl:747 Base.getproperty(%7, :result)
+│││││││││ runtime dispatch detected: Base.getproperty(%7::Task, :result::Symbol)
+││││││││└───────────────
+││││││││┌ @ task.jl:748 Base.setproperty!(%7, :result, Base.nothing)
+│││││││││ runtime dispatch detected: Base.setproperty!(%7::Task, :result::Symbol, Base.nothing)
+││││││││└───────────────
+││││││││┌ @ task.jl:749 Base.setproperty!(%7, :_isexception, false)
+│││││││││ runtime dispatch detected: Base.setproperty!(%7::Task, :_isexception::Symbol, false)
+││││││││└───────────────
+││││││┌ @ condition.jl:114 Base.list_deletefirst!(%63, %57)
+│││││││ runtime dispatch detected: Base.list_deletefirst!(%63::Any, %57::Task)
+││││││└────────────────────
+││││┌ @ stream.jl:282 Base.lock(%3)
+│││││ runtime dispatch detected: Base.lock(%3::Base.AbstractLock)
+││││└─────────────────
 ││││┌ @ show.jl:334 Base.lock(%1)
 │││││ runtime dispatch detected: Base.lock(%1::IO)
 ││││└───────────────
@@ -261,20 +260,20 @@ Dispatch Test Failed at none:1
   ═════ 12 possible errors found ═════
   ┌ @ none:2 Main.__atexample__named__quickstart.make_vals(Main.__atexample__named__quickstart.n)
   │┌ @ none:1 Main.__atexample__named__quickstart.≥(n, 0)
+  ││┌ @ operators.jl:425 Base.&lt;=(y, x)
+  │││ runtime dispatch detected: Base.&lt;=(y::Int64, x::Any)
+  ││└────────────────────
+  │┌ @ none:1 Main.__atexample__named__quickstart.:(%3, n)
+  ││ runtime dispatch detected: Main.__atexample__named__quickstart.:(%3::Any, n::Any)
+  │└──────────
+  │┌ @ none:1 Main.__atexample__named__quickstart.zero(n)
+  ││ runtime dispatch detected: Main.__atexample__named__quickstart.zero(n::Any)
+  │└──────────
+  │┌ @ none:1 Main.__atexample__named__quickstart.≥(n, 0)
   ││ runtime dispatch detected: Main.__atexample__named__quickstart.≥(n::Any, 0)
   │└──────────
   │┌ @ none:1 Main.__atexample__named__quickstart.:(n, %6)
   ││ runtime dispatch detected: Main.__atexample__named__quickstart.:(n::Any, %6::Any)
-  │└──────────
-  │┌ @ none:1 Main.__atexample__named__quickstart.≥(n, 0)
-  ││┌ @ operators.jl:425 Base.&lt;=(y, x)
-  │││ runtime dispatch detected: Base.&lt;=(y::Int64, x::Any)
-  ││└────────────────────
-  │┌ @ none:1 Main.__atexample__named__quickstart.zero(n)
-  ││ runtime dispatch detected: Main.__atexample__named__quickstart.zero(n::Any)
-  │└──────────
-  │┌ @ none:1 Main.__atexample__named__quickstart.:(%3, n)
-  ││ runtime dispatch detected: Main.__atexample__named__quickstart.:(%3::Any, n::Any)
   │└──────────
   ┌ @ none:2 Main.__atexample__named__quickstart.make_vals(%1)
   │ runtime dispatch detected: Main.__atexample__named__quickstart.make_vals(%1::Any)
@@ -321,20 +320,20 @@ check type-stabilities: Dispatch Test Failed at none:3
   ═════ 12 possible errors found ═════
   ┌ @ none:2 Main.__atexample__named__quickstart.make_vals(Main.__atexample__named__quickstart.n)
   │┌ @ none:1 Main.__atexample__named__quickstart.≥(n, 0)
+  ││┌ @ operators.jl:425 Base.&lt;=(y, x)
+  │││ runtime dispatch detected: Base.&lt;=(y::Int64, x::Any)
+  ││└────────────────────
+  │┌ @ none:1 Main.__atexample__named__quickstart.:(%3, n)
+  ││ runtime dispatch detected: Main.__atexample__named__quickstart.:(%3::Any, n::Any)
+  │└──────────
+  │┌ @ none:1 Main.__atexample__named__quickstart.zero(n)
+  ││ runtime dispatch detected: Main.__atexample__named__quickstart.zero(n::Any)
+  │└──────────
+  │┌ @ none:1 Main.__atexample__named__quickstart.≥(n, 0)
   ││ runtime dispatch detected: Main.__atexample__named__quickstart.≥(n::Any, 0)
   │└──────────
   │┌ @ none:1 Main.__atexample__named__quickstart.:(n, %6)
   ││ runtime dispatch detected: Main.__atexample__named__quickstart.:(n::Any, %6::Any)
-  │└──────────
-  │┌ @ none:1 Main.__atexample__named__quickstart.≥(n, 0)
-  ││┌ @ operators.jl:425 Base.&lt;=(y, x)
-  │││ runtime dispatch detected: Base.&lt;=(y::Int64, x::Any)
-  ││└────────────────────
-  │┌ @ none:1 Main.__atexample__named__quickstart.zero(n)
-  ││ runtime dispatch detected: Main.__atexample__named__quickstart.zero(n::Any)
-  │└──────────
-  │┌ @ none:1 Main.__atexample__named__quickstart.:(%3, n)
-  ││ runtime dispatch detected: Main.__atexample__named__quickstart.:(%3::Any, n::Any)
   │└──────────
   ┌ @ none:2 Main.__atexample__named__quickstart.make_vals(%1)
   │ runtime dispatch detected: Main.__atexample__named__quickstart.make_vals(%1::Any)
@@ -427,4 +426,4 @@ ERROR: There was an error during testing
 # we can also turns off the heuristic itself
 julia&gt; @test_nodispatch unoptimize_throw_blocks=false analyze_unoptimized_throw_blocks=true sin(10)
 Test Passed
-  Expression: #= none:1 =# JETTest.@test_nodispatch unoptimize_throw_blocks = false analyze_unoptimized_throw_blocks = true sin(10)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/aviatesk/JETTest.jl/blob/9c86184aad3aebc64841e82df63296ef3c9b3d9b/src/dispatch.jl#L4-L58">source</a></section></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« README</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Thursday 17 June 2021 09:43">Thursday 17 June 2021</span>. Using Julia version 1.8.0-DEV.42.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  Expression: #= none:1 =# JETTest.@test_nodispatch unoptimize_throw_blocks = false analyze_unoptimized_throw_blocks = true sin(10)</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/aviatesk/JETTest.jl/blob/9c86184aad3aebc64841e82df63296ef3c9b3d9b/src/dispatch.jl#L4-L58">source</a></section></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« README</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 20 June 2021 09:29">Sunday 20 June 2021</span>. Using Julia version 1.8.0-DEV.57.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
