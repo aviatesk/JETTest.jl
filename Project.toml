@@ -1,7 +1,7 @@
 name = "JETTest"
 uuid = "a79fb612-4a80-4749-a9bd-c2faab13da61"
 authors = ["Shuhei Kadowaki <aviatesk@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"

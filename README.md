@@ -5,4 +5,4 @@
 [![codecov](https://codecov.io/gh/aviatesk/JETTest.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/aviatesk/JETTest.jl)
 
 JETTest.jl is an advanced testing toolset for the Julia programming language.
-It automatically detects otherwise-overlooked problems, and helps you keep your code free from the problems.
+It automatically detects otherwise-overlooked problems, and helps you keep your code to be faster and robust.
