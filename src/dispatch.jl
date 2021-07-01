@@ -302,7 +302,7 @@ function report_dispatch(@nospecialize(f), @nospecialize(types = Tuple{});
 end
 
 """
-    @report_dispatch [jetconfigs...] f(args...)
+    @analyze_dispatch [jetconfigs...] f(args...)
 
 Evaluates the arguments to the function call, determines its types, and then calls
 [`analyze_dispatch`](@ref) on the resulting expression.
