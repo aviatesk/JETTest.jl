@@ -86,6 +86,7 @@ export
     @analyze_dispatch,
     report_dispatch,
     @report_dispatch,
+    test_nodispatch,
     @test_nodispatch,
     module_filter
 

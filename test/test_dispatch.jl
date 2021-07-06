@@ -1,6 +1,6 @@
 module TestDispatch
 
-using Test, JETTest
+using Test, JETTest, MacroTools
 import JETTest: RuntimeDispatchReport, module_filter
 import JET: get_reports
 
@@ -147,8 +147,28 @@ function with_isolated_testset(f)
     return ts
 end
 
+# do a test that is equivalent to `macroex` but with `test_nodispatch`
+macro addfntest(macroex)
+    funcex = MacroTools.postwalk(macroex) do x
+        pat = :(@test_nodispatch(args__))
+        if @capture(x, $pat)
+            if isexpr(x, :macrocall)
+                kwargs = map(x->Expr(:kw, x.args...), x.args[findall(x->isexpr(x,:(=)), x.args)])
+                testex = x.args[findfirst(x->isexpr(x,:call), x.args)::Int]
+                return :(test_nodispatch(Base.typesof($(testex.args...)); $(kwargs...)))
+            end
+        end
+        return x
+    end
+
+    return quote
+        $macroex
+        $funcex
+    end
+end
+
 # positive case
-let
+@addfntest let
     ts = with_isolated_testset() do
         @test_nodispatch f(10) # ok
     end
@@ -185,7 +205,7 @@ let
 end
 
 # supports `skip` keyword
-let
+@addfntest let
     ts = with_isolated_testset() do
         @test_nodispatch skip=true ff(10)
     end
@@ -207,7 +227,7 @@ let
 end
 
 # supports `broken` keyword
-let
+@addfntest let
     ts = with_isolated_testset() do
         @test_nodispatch broken=true ff(10)
     end
@@ -238,7 +258,7 @@ let
 end
 
 # supports JET's configurations
-let
+@addfntest let
     ts = with_isolated_testset() do
         @test_nodispatch sin(10) # ok
     end

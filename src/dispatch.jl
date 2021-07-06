@@ -274,31 +274,33 @@ end # @static if isdefined(CC, :finish!)
 
 """
     analyze_dispatch(f, types = Tuple{}; jetconfigs...) -> (analyzer::DispatchAnalyzer, frame::Union{InferenceFrame,Nothing})
+    analyze_dispatch(tt::Type{<:Tuple}; jetconfigs...) -> (analyzer::DispatchAnalyzer, frame::Union{InferenceFrame,Nothing})
 
 Analyzes the generic function call with the given type signature, and returns:
 - `analyzer::DispatchAnalyzer`: contains analyzed optimization failures and runtime dispatch points
 - `frame::Union{InferenceFrame,Nothing}`: the final state of the abstract interpretation,
   or `nothing` if `f` is a generator and the code generation has been failed
 """
-function analyze_dispatch(@nospecialize(f), @nospecialize(types = Tuple{});
+function analyze_dispatch(@nospecialize(args...);
                           analyzer = DispatchAnalyzer,
                           jetconfigs...)
     @assert analyzer === DispatchAnalyzer "analyzer is fixed to $DispatchAnalyzer"
-    analyze_call(f, types; analyzer, jetconfigs...)
+    return analyze_call(args...; analyzer, jetconfigs...)
 end
 
 """
     report_dispatch(f, types = Tuple{}; jetconfigs...) -> result_type::Any
+    report_dispatch(tt::Type{<:Tuple}; jetconfigs...) -> result_type::Any
 
 Analyzes the generic function call with the given type signature, and then prints detected
 optimization failures and runtime dispatch points to `stdout`, and finally returns the result
 type of the call.
 """
-function report_dispatch(@nospecialize(f), @nospecialize(types = Tuple{});
+function report_dispatch(@nospecialize(args...);
                          analyzer = DispatchAnalyzer,
                          jetconfigs...)
     @assert analyzer === DispatchAnalyzer "analyzer is fixed to $DispatchAnalyzer"
-    report_call(f, types; analyzer, jetconfigs...)
+    return report_call(args...; analyzer, jetconfigs...)
 end
 
 """
@@ -475,6 +477,50 @@ function test_dispatch_exs(ex0, m, source)
         $Error(:test_error, $orig_expr, err, $get_exceptions(), $source)
     end) |> Base.remove_linenums!
     return testres, orig_expr
+end
+
+"""
+    test_nodispatch(f, types = Tuple{}; broken::Bool = false, skip::Bool = false, jetconfigs...)
+    test_nodispatch(tt::Type{<:Tuple}; broken::Bool = false, skip::Bool = false, jetconfigs...)
+
+Tests the generic function call with the given type signature is free from runtime dispatch.
+Except that it takes a type signature rather than a call expression, this function works
+in the same way as [`@test_nodispatch`](@ref).
+"""
+function test_nodispatch(@nospecialize(args...);
+                         broken::Bool = false, skip::Bool = false,
+                         jetconfigs...)
+    source = LineNumberNode(@__LINE__, @__FILE__)
+    kwargs = map(((k,v),)->Expr(:kw, k, v), collect(jetconfigs))
+    orig_expr = :(JETTest.test_nodispatch($(args...); $(kwargs...)))
+
+    if skip
+        record(get_testset(), Broken(:skipped, orig_expr))
+    else
+        testres = try
+            analyzer, frame = analyze_dispatch(args...; jetconfigs...)
+            reports = get_reports(analyzer)
+            if length(reports) == 0
+                Pass(:test_nodispatch, orig_expr, nothing, nothing, source)
+            else
+                DispatchTestFailure(orig_expr, source, reports)
+            end
+        catch err
+            isa(err, InterruptException) && rethrow()
+            Error(:test_error, orig_expr, err, get_exceptions(), source)
+        end
+
+        if broken
+            if isa(testres, DispatchTestFailure)
+                testres = Broken(:test_nodispatch, orig_expr)
+            elseif isa(testres, Pass)
+                testres = Error(:test_unbroken, orig_expr, nothing, nothing, source)
+            end
+        else
+            isa(testres, Pass) || ccall(:jl_breakpoint, Cvoid, (Any,), testres)
+        end
+        record(get_testset(), testres)
+    end
 end
 
 # NOTE we will just show abstract call strack, and won't show backtrace of actual test executions

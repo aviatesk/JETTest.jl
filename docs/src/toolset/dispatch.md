@@ -116,6 +116,7 @@ report_dispatch
 @analyze_dispatch
 analyze_dispatch
 @test_nodispatch
+test_nodispatch
 ```
 
 ## [Configurations](@id dispatch-analysis-configurations)
