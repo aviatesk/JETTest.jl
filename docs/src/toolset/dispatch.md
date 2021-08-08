@@ -113,8 +113,6 @@ These macros/functions are the entries of dispatch analysis:
 ```@docs
 @report_dispatch
 report_dispatch
-@analyze_dispatch
-analyze_dispatch
 @test_nodispatch
 test_nodispatch
 ```
