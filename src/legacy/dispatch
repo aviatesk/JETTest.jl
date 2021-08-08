@@ -23,7 +23,7 @@ function CC.optimize(analyzer::AbstractAnalyzer, opt::OptimizationState, params:
 
     concrete_frame = analyzer.concrete_frame
     if (isnothing(concrete_frame) || concrete_frame::Bool) && analyzer.frame_filter(opt)
-        report_pass!(RuntimeDispatchReport, analyzer, opt)
+        ReportPass(analyzer)(RuntimeDispatchReport, analyzer, opt)
     end
 
     return ret

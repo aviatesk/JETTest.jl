@@ -21,9 +21,6 @@ using JET.JETInterfaces
 import JET:
     get_cache_key
 
-import Test:
-    record
-
 # usings
 # ======
 
@@ -33,7 +30,6 @@ using JET:
     State,
     @invoke,
     @isexpr,
-    gen_call_with_extracted_types_and_kwargs,
     get_reports,
     print_reports
 
@@ -54,16 +50,6 @@ using Core:
     CodeInfo,
     MethodInstance
 
-using Test:
-    Test,
-    Pass, Fail, Broken, Error,
-    Threw,
-    get_testset,
-    TESTSET_PRINT_ENABLE,
-    AbstractTestSet,
-    DefaultTestSet,
-    FallbackTestSetException
-
 # filters
 # =======
 
@@ -79,8 +65,6 @@ end
 include("dispatch.jl")
 
 export
-    analyze_dispatch,
-    @analyze_dispatch,
     report_dispatch,
     @report_dispatch,
     test_nodispatch,
