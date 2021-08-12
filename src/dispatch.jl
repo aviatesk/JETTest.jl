@@ -147,6 +147,9 @@ JETInterfaces.AbstractAnalyzer(analyzer::DispatchAnalyzer, state::AnalyzerState)
     DispatchAnalyzer(state, analyzer.opts, analyzer.frame_filter, analyzer.function_filter, analyzer.concrete_frame, analyzer.skip_unoptimized_throw_blocks)
 JETInterfaces.ReportPass(analyzer::DispatchAnalyzer) = DispatchAnalysisPass()
 
+# VSCode integration
+JETInterfaces.vscode_diagnostics_order(analyzer::DispatchAnalyzer) = false
+
 # we want to run different analysis with a different filter, so include its hash into the cache key
 function JET.get_cache_key(analyzer::DispatchAnalyzer)
     h = @invoke get_cache_key(analyzer::AbstractAnalyzer)
